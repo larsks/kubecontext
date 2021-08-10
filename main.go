@@ -20,6 +20,8 @@ type (
 	}
 )
 
+// Discover .kubecontext files starting in the current directory
+// and iterating over parents directories until we reach "/".
 func findKubecontext() []string {
 	var contexts []string
 
@@ -47,6 +49,7 @@ func findKubecontext() []string {
 	return contexts
 }
 
+// Apply settings from the specified .kubecontext file.
 func processKubecontext(context string) error {
 	var config Config
 
@@ -90,9 +93,11 @@ func processKubecontext(context string) error {
 	return nil
 }
 
-func main() {
+// Configure log level based on the K_LOGLEVEL environment variable.
+// Valid values are "debug" and "info"; anything else results in
+// logging messages at WARN and above.
+func configureLogging() {
 	var loglevel log.Level
-	var commandName string
 
 	switch strings.ToLower(os.Getenv("K_LOGLEVEL")) {
 	case "debug":
@@ -105,7 +110,17 @@ func main() {
 
 	log.SetLevel(loglevel)
 
+}
+
+func main() {
+	var commandName string
+
+	configureLogging()
+
 	kubecontexts := findKubecontext()
+
+	// If we discovered one or more .kubecontext files, iterate over them
+	// in reverse order, applying the configuration from each one.
 	if kubecontexts != nil {
 		for i := range kubecontexts {
 			current := kubecontexts[len(kubecontexts)-i-1]
@@ -115,6 +130,9 @@ func main() {
 		}
 	}
 
+	// If you have a project that requires `oc` instead of `kubectl`,
+	// you can set `K_COMMANDNAME` in your environment (or in the
+	// `environment` section of your `.kubecontext` file.
 	if value := os.Getenv("K_COMMANDNAME"); value != "" {
 		commandName = value
 	} else {
@@ -127,5 +145,7 @@ func main() {
 		if err = syscall.Exec(path, os.Args, os.Environ()); err != nil {
 			log.Fatalf("failed to execute kubectl: %v", err)
 		}
+	} else {
+		log.Errorf("did not find %s in PATH", commandName)
 	}
 }
