@@ -139,7 +139,10 @@ func Kubecontext() {
 	if err != nil {
 		panic(err)
 	}
-	defer os.Remove(tmpfile.Name())
+	defer func() {
+		log.Debugf("removing %s", tmpfile.Name())
+		os.Remove(tmpfile.Name())
+	}()
 
 	if err := generateKubeconfig(tmpfile); err != nil {
 		panic(err)
