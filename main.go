@@ -112,42 +112,36 @@ func configureLogging() {
 
 }
 
-func generateKubeconfig() (string, error) {
-	kubeconfig, err := ioutil.TempFile("", "kubeconfig")
-	if err != nil {
-		return "", err
-	}
+// Write kubectl configuration to a temporary file. We manipulate the
+// temporary file rather than modifying the real kubeconfig.
+func generateKubeconfig(kubeconfig *os.File) error {
 	log.Debugf("writing temporary kubeconfig to %s", kubeconfig.Name())
 
 	cmd := exec.Command("kubectl", "config", "view", "--flatten", "--merge")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return kubeconfig.Name(), err
+		return err
 	}
 	if err := cmd.Start(); err != nil {
-		return kubeconfig.Name(), err
+		return err
 	}
 	go io.Copy(kubeconfig, stdout)
 	cmd.Wait()
 
 	os.Setenv("KUBECONFIG", kubeconfig.Name())
-	return kubeconfig.Name(), nil
-}
-
-func removeFile(fname string) {
-	log.Debugf("removing %s", fname)
-	if fname != "" {
-		os.Remove(fname)
-	}
+	return nil
 }
 
 func Kubecontext() {
 	var commandName string
 
-	kubeconfig, err := generateKubeconfig()
-	defer removeFile(kubeconfig)
-
+	tmpfile, err := ioutil.TempFile("", "kubeconfig")
 	if err != nil {
+		panic(err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	if err := generateKubeconfig(tmpfile); err != nil {
 		panic(err)
 	}
 
