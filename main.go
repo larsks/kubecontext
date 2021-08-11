@@ -1,12 +1,12 @@
 package main
 
 import (
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
 	"strings"
-	"syscall"
 
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
@@ -22,13 +22,13 @@ type (
 
 // Discover .kubecontext files starting in the current directory
 // and iterating over parents directories until we reach "/".
-func findKubecontext() []string {
+func findKubecontext() ([]string, error) {
 	var contexts []string
 
 	for {
 		cwd, err := os.Getwd()
 		if err != nil {
-			log.Fatalf("failed to determine current directory: %v", err)
+			return nil, err
 		}
 
 		if cwd == "/" {
@@ -46,7 +46,7 @@ func findKubecontext() []string {
 		os.Chdir("..")
 	}
 
-	return contexts
+	return contexts, nil
 }
 
 // Apply settings from the specified .kubecontext file.
@@ -112,12 +112,49 @@ func configureLogging() {
 
 }
 
-func main() {
+func generateKubeconfig() (string, error) {
+	kubeconfig, err := ioutil.TempFile("", "kubeconfig")
+	if err != nil {
+		return "", err
+	}
+	log.Debugf("writing temporary kubeconfig to %s", kubeconfig.Name())
+
+	cmd := exec.Command("kubectl", "config", "view", "--flatten", "--merge")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return kubeconfig.Name(), err
+	}
+	if err := cmd.Start(); err != nil {
+		return kubeconfig.Name(), err
+	}
+	go io.Copy(kubeconfig, stdout)
+	cmd.Wait()
+
+	os.Setenv("KUBECONFIG", kubeconfig.Name())
+	return kubeconfig.Name(), nil
+}
+
+func removeFile(fname string) {
+	log.Debugf("removing %s", fname)
+	if fname != "" {
+		os.Remove(fname)
+	}
+}
+
+func Kubecontext() {
 	var commandName string
 
-	configureLogging()
+	kubeconfig, err := generateKubeconfig()
+	defer removeFile(kubeconfig)
 
-	kubecontexts := findKubecontext()
+	if err != nil {
+		panic(err)
+	}
+
+	kubecontexts, err := findKubecontext()
+	if err != nil {
+		panic(err)
+	}
 
 	// If we discovered one or more .kubecontext files, iterate over them
 	// in reverse order, applying the configuration from each one.
@@ -125,7 +162,7 @@ func main() {
 		for i := range kubecontexts {
 			current := kubecontexts[len(kubecontexts)-i-1]
 			if err := processKubecontext(current); err != nil {
-				log.Fatalf("failed to process %s: %v", current, err)
+				panic(err)
 			}
 		}
 	}
@@ -139,13 +176,23 @@ func main() {
 		commandName = "kubectl"
 	}
 
-	if path, err := exec.LookPath(commandName); err == nil {
-		os.Args[0] = path
-		log.Debugf("executing %s with args: %v", path, os.Args)
-		if err = syscall.Exec(path, os.Args, os.Environ()); err != nil {
-			log.Fatalf("failed to execute kubectl: %v", err)
-		}
-	} else {
-		log.Errorf("did not find %s in PATH", commandName)
+	log.Debugf("executing %s with args: %v", commandName, os.Args[1:])
+	cmd := exec.Command(commandName, os.Args[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		panic(err)
 	}
+}
+
+func main() {
+	configureLogging()
+
+	defer func() {
+		if err := recover(); err != nil {
+			log.Fatalf("ERROR: %s", err)
+		}
+	}()
+
+	Kubecontext()
 }
