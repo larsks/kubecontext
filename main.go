@@ -1,3 +1,21 @@
+/*
+
+kubecontext (c) 2021 Lars Kellogg-Stedman <lars@oddbit.com>
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may
+not use this file except in compliance with the License. You may obtain
+a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+License for the specific language governing permissions and limitations
+under the License.
+
+*/
+
 package main
 
 import (
@@ -9,26 +27,17 @@ import (
 	"strings"
 
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v3"
-)
-
-type (
-	Config struct {
-		Context     string
-		Namespace   string
-		Environment map[string]string
-	}
 )
 
 // Discover .kubecontext files starting in the current directory
 // and iterating over parents directories until we reach "/".
-func findKubecontext() ([]string, error) {
-	var contexts []string
+func findKubecontext() []string {
+	var configs []string
 
 	for {
 		cwd, err := os.Getwd()
 		if err != nil {
-			return nil, err
+			panic(err)
 		}
 
 		if cwd == "/" {
@@ -40,57 +49,22 @@ func findKubecontext() ([]string, error) {
 		if _, err := os.Stat("./.kubecontext"); err == nil {
 			kubecontext := path.Join(cwd, ".kubecontext")
 			log.Debugf("found %s", kubecontext)
-			contexts = append(contexts, kubecontext)
+			configs = append(configs, kubecontext)
 		}
 
 		os.Chdir("..")
 	}
 
-	return contexts, nil
+	return configs
 }
 
 // Apply settings from the specified .kubecontext file.
-func processKubecontext(context string) error {
+func processKubecontext(configfile string) {
 	var config Config
 
-	log.Infof("processing configuration from %s", context)
-
-	data, err := ioutil.ReadFile(context)
-	if err != nil {
-		return err
-	}
-
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return err
-	}
-
-	if config.Context != "" {
-		log.Infof("setting context to %s", config.Context)
-		cmd := exec.Command("kubectl", "config", "use-context", config.Context)
-		if err := cmd.Run(); err != nil {
-			return err
-		}
-	}
-
-	if config.Namespace != "" {
-		log.Infof("setting namespace to %s", config.Namespace)
-		cmd := exec.Command(
-			"kubectl", "config", "set-context", "--current",
-			"--namespace", config.Namespace,
-		)
-		if err := cmd.Run(); err != nil {
-			return err
-		}
-	}
-
-	if config.Environment != nil {
-		for name, value := range config.Environment {
-			log.Infof("setting environment variable %s to %s", name, value)
-			os.Setenv(name, value)
-		}
-	}
-
-	return nil
+	log.Infof("processing configuration from %s", configfile)
+	config.FromFile(configfile)
+	config.Apply()
 }
 
 // Configure log level based on the K_LOGLEVEL environment variable.
@@ -148,19 +122,14 @@ func Kubecontext() {
 		panic(err)
 	}
 
-	kubecontexts, err := findKubecontext()
-	if err != nil {
-		panic(err)
-	}
+	kubecontexts := findKubecontext()
 
 	// If we discovered one or more .kubecontext files, iterate over them
 	// in reverse order, applying the configuration from each one.
 	if kubecontexts != nil {
 		for i := range kubecontexts {
 			current := kubecontexts[len(kubecontexts)-i-1]
-			if err := processKubecontext(current); err != nil {
-				panic(err)
-			}
+			processKubecontext(current)
 		}
 	}
 
