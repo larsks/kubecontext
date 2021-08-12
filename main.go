@@ -34,6 +34,12 @@ import (
 func findKubecontext() []string {
 	var configs []string
 
+	original_cwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	defer os.Chdir(original_cwd)
+
 	for {
 		cwd, err := os.Getwd()
 		if err != nil {
