@@ -146,6 +146,7 @@ func Kubecontext() {
 	cmd := exec.Command(commandName, os.Args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
 	if err := cmd.Run(); err != nil {
 		panic(err)
 	}
