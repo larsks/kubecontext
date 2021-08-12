@@ -2,16 +2,37 @@
 
 Enable per-directory context settings for `kubectl`.
 
+## Overview
+
+Install the `kubecontext` binary as `$HOME/bin/k`, create a
+`.kubecontext` file in your project directory, like this...
+
+```
+context: my-cluster
+namespace: my-project
+```
+
+...and then run `k` instead of `kubectl`:
+
+```
+$ k get pod
+```
+
+Etc.
+
 ## File format
 
 A `.kubecontext` file is a YAML file that may contain one or more of the following keys:
 
-- `context` -- the name of a context in your `$KUBECONFIG` file.
+- `context` -- the name of a context in your `$KUBECONFIG` file. You
+  can get a list of available contexts by running `kubectl config
+  get-contexts`.
 - `namespace` -- the name of a namespace in your cluster
 - `command` -- name of a command to run instead of `kubectl` (e.g.,
   `oc`)
 - `environment` -- a dictionary of environment variable names and
-  values
+  values. I use this primarily for setting proxy information (because
+  `oc login` delete proxy settings from the kubeconfig file).
 
 For example:
 
