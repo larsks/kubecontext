@@ -32,6 +32,7 @@ type (
 	Config struct {
 		Context     string
 		Namespace   string
+		Command     string
 		Environment map[string]string
 	}
 )
@@ -81,18 +82,43 @@ func (config *Config) SetEnv() {
 	}
 }
 
-// Read configuration from the specified YAML file
+// Merge configuration from newconfig into config
+func (config *Config) Merge(newconfig Config) {
+	if newconfig.Context != "" {
+		config.Context = newconfig.Context
+	}
+	if newconfig.Namespace != "" {
+		config.Namespace = newconfig.Namespace
+	}
+	if newconfig.Command != "" {
+		config.Command = newconfig.Command
+	}
+
+	for k, v := range newconfig.Environment {
+		if config.Environment == nil {
+			config.Environment = make(map[string]string)
+		}
+
+		config.Environment[k] = v
+	}
+}
+
+// Read configuration from the specified YAML file and merge it
+// into the existing configuration.
 func (config *Config) FromFile(configfile string) {
+	var newconfig Config
+
 	data, err := ioutil.ReadFile(configfile)
 	if err != nil {
 		panic(err)
 	}
 
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	if err := yaml.Unmarshal(data, &newconfig); err != nil {
 		panic(err)
 	}
 
 	log.Debugf("%s has config %+v", configfile, config)
+	config.Merge(newconfig)
 }
 
 // Apply the settings described by the Config object

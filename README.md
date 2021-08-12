@@ -1,6 +1,6 @@
 # kubecontext
 
-Enable per-directory context settings for `kubectl` (or `oc`).
+Enable per-directory context settings for `kubectl`.
 
 ## File format
 
@@ -8,6 +8,8 @@ A `.kubecontext` file is a YAML file that may contain one or more of the followi
 
 - `context` -- the name of a context in your `$KUBECONFIG` file.
 - `namespace` -- the name of a namespace in your cluster
+- `command` -- name of a command to run instead of `kubectl` (e.g.,
+  `oc`)
 - `environment` -- a dictionary of environment variable names and
   values
 
@@ -22,7 +24,7 @@ namespace: project1
 
 Kubecontext looks for a file named `.kubecontext` in the current
 directory and in all parents directories. It will then iterate over
-any discovered `.kubecontex` files, applying them from the highest in
+any discovered `.kubecontext` files, applying them from the highest in
 the hierarchy to the lowest.
 
 For example, assume the following file hierarchy:

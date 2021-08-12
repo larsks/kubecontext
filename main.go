@@ -59,12 +59,9 @@ func findKubecontext() []string {
 }
 
 // Apply settings from the specified .kubecontext file.
-func processKubecontext(configfile string) {
-	var config Config
-
+func processKubecontext(configfile string, config *Config) {
 	log.Infof("processing configuration from %s", configfile)
 	config.FromFile(configfile)
-	config.Apply()
 }
 
 // Configure log level based on the K_LOGLEVEL environment variable.
@@ -108,6 +105,7 @@ func generateKubeconfig(kubeconfig *os.File) error {
 
 func Kubecontext() {
 	var commandName string
+	var config Config
 
 	tmpfile, err := ioutil.TempFile("", "kubeconfig")
 	if err != nil {
@@ -129,15 +127,17 @@ func Kubecontext() {
 	if kubecontexts != nil {
 		for i := range kubecontexts {
 			current := kubecontexts[len(kubecontexts)-i-1]
-			processKubecontext(current)
+			processKubecontext(current, &config)
 		}
+
+		config.Apply()
 	}
 
 	// If you have a project that requires `oc` instead of `kubectl`,
 	// you can set `K_COMMANDNAME` in your environment (or in the
 	// `environment` section of your `.kubecontext` file.
-	if value := os.Getenv("K_COMMANDNAME"); value != "" {
-		commandName = value
+	if config.Command != "" {
+		commandName = config.Command
 	} else {
 		commandName = "kubectl"
 	}
