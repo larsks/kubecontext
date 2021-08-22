@@ -23,51 +23,31 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
 
-// Discover .kubecontext files starting in the current directory
-// and iterating over parents directories until we reach "/".
-func findKubecontext() []string {
-	var configs []string
-
-	original_cwd, err := os.Getwd()
+func findConfigRecursive(config *Config) {
+	cwd, err := os.Getwd()
 	if err != nil {
 		panic(err)
 	}
-	defer os.Chdir(original_cwd)
 
-	for {
-		cwd, err := os.Getwd()
-		if err != nil {
-			panic(err)
-		}
-
-		if cwd == "/" {
-			break
-		}
-
-		log.Debugf("looking for .kubecontext in %s", cwd)
-
-		if _, err := os.Stat("./.kubecontext"); err == nil {
-			kubecontext := path.Join(cwd, ".kubecontext")
-			log.Debugf("found %s", kubecontext)
-			configs = append(configs, kubecontext)
-		}
-
+	if cwd != "/" {
 		os.Chdir("..")
+		findConfigRecursive(config)
+		os.Chdir(cwd)
 	}
 
-	return configs
-}
+	log.Debugf("looking for .kubecontext in %s", cwd)
 
-// Apply settings from the specified .kubecontext file.
-func processKubecontext(configfile string, config *Config) {
-	log.Infof("processing configuration from %s", configfile)
-	config.FromFile(configfile)
+	if _, err := os.Stat("./.kubecontext"); err == nil {
+		kubecontext := filepath.Join(cwd, ".kubecontext")
+		log.Debugf("found %s", kubecontext)
+		config.FromFile(kubecontext)
+	}
 }
 
 // Configure log level based on the K_LOGLEVEL environment variable.
@@ -122,22 +102,16 @@ func Kubecontext() {
 		os.Remove(tmpfile.Name())
 	}()
 
+	findConfigRecursive(&config)
+	if config.Kubeconfig != "" {
+		config.SetKubeconfig()
+	}
+
 	if err := generateKubeconfig(tmpfile); err != nil {
 		panic(err)
 	}
 
-	kubecontexts := findKubecontext()
-
-	// If we discovered one or more .kubecontext files, iterate over them
-	// in reverse order, applying the configuration from each one.
-	if kubecontexts != nil {
-		for i := range kubecontexts {
-			current := kubecontexts[len(kubecontexts)-i-1]
-			processKubecontext(current, &config)
-		}
-
-		config.Apply()
-	}
+	config.Apply()
 
 	// If you have a project that requires `oc` instead of `kubectl`,
 	// you can set `K_COMMANDNAME` in your environment (or in the

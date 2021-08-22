@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
@@ -30,6 +31,7 @@ import (
 
 type (
 	Config struct {
+		Kubeconfig  string
 		Context     string
 		Namespace   string
 		Command     string
@@ -82,8 +84,32 @@ func (config *Config) SetEnv() {
 	}
 }
 
+func (config *Config) SetKubeconfig() {
+	if config.Kubeconfig != "" {
+		log.Debugf("set KUBECONFIG=%s", config.Kubeconfig)
+		if err := os.Setenv("KUBECONFIG", config.Kubeconfig); err != nil {
+			panic(fmt.Errorf("failed to set KUBECONFIG environment variable"))
+		}
+	} else {
+		log.Debugf("config has no kubeconfig")
+	}
+}
+
 // Merge configuration from newconfig into config
 func (config *Config) Merge(newconfig Config) {
+	if newconfig.Kubeconfig != "" {
+		kubeconfig := newconfig.Kubeconfig
+		cwd, err := os.Getwd()
+		if err != nil {
+			panic(err)
+		}
+
+		if kubeconfig[0] != '/' {
+			kubeconfig = filepath.Join(cwd, kubeconfig)
+		}
+
+		config.Kubeconfig = kubeconfig
+	}
 	if newconfig.Context != "" {
 		config.Context = newconfig.Context
 	}
@@ -117,8 +143,9 @@ func (config *Config) FromFile(configfile string) {
 		panic(err)
 	}
 
-	log.Debugf("%s has config %+v", configfile, config)
+	log.Debugf("%s has config: %+v", configfile, newconfig)
 	config.Merge(newconfig)
+	log.Debugf("merged config is: %+v", config)
 }
 
 // Apply the settings described by the Config object
